@@ -1,9 +1,0 @@
-[
-    {
-      "origin": ["https://eventflowerexchange.vercel.app"],
-      "method": ["GET", "POST", "PUT"],
-      "responseHeader": ["Content-Type", "Authorization"],
-      "maxAgeSeconds": 3600
-    }
-  ]
-  
