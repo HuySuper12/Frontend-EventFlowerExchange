@@ -1,30 +1,407 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import api from "../../../config/axios"; // Import axios
 import Header from "../../../component/header";
 import Footer from "../../../component/footer";
 import { Button, Modal } from "antd";
+import { Tabs, Tab } from "../../../component/tab";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 
 function Order_Page() {
-  const [open, setOpen] = useState(false); // Removed type annotation
-  const [loading, setLoading] = useState(true); // Removed type annotation
-  const [status, setStatus] = useState("giao hàng thành công");
+  const [orders, setOrders] = useState([]);
+  const [orderDetails, setOrderDetails] = useState([]);
+  const [orders2, setOrders2] = useState([]);
+  const [orderDetails2, setOrderDetails2] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [status, setStatus] = useState("");
+  const [selectedOrderDetails, setSelectedOrderDetails] = useState({});
+  const [accountBuyer, setAccountBuyer] = useState({});
+  const [orderTime, setOrderTime] = useState([]);
+  const navigate = useNavigate();
+  const [isRated, setIsRated] = useState(false); // New state to track rating status
 
-  const showLoading = () => {
-    setOpen(true);
-    setLoading(true);
+  useEffect(() => {
+    const role = sessionStorage.getItem("role");
+    if (role === "Seller") {
+      navigate("/");
+    } else if (role === "Admin") {
+      navigate("/admin");
+    } else if (role === "Staff") {
+      navigate("/staff");
+    } else if (role === "Shipper") {
+      navigate("/delivery-detail");
+    } else if (!role) {
+      navigate("/login");
+      toast.error("Please login first.");
+    }
+  }, [navigate]);
 
-    // Simple loading mock. You should add cleanup logic in real world.
-    setTimeout(() => {
-      setLoading(false);
-    }, 500);
+  // Fetch all orders
+  useEffect(() => {
+    const userEmail = sessionStorage.getItem("email");
+    console.log("User Email:", userEmail);
+    if (!userEmail) {
+      console.error("No email found in session storage");
+      return;
+    }
+
+    (async () => {
+      try {
+        const response = await api.get("Order/ViewOrderByBuyerEmail", {
+          params: { email: userEmail },
+        });
+        console.log("API response:", response.data); // Kiểm tra dữ liệu trả về
+        if (Array.isArray(response.data)) {
+          const filteredOrders = response.data.filter(
+            (order) => order.status !== null
+          );
+          setOrders(filteredOrders.reverse()); // Sử dụng response.data
+        } else {
+          setOrders([]);
+        }
+      } catch (error) {
+        console.error("Error fetching orders", error);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    const fetchOrdersByStatus = async () => {
+      const userEmail = sessionStorage.getItem("email");
+      console.log("User Email:", userEmail);
+      if (!userEmail) {
+        console.error("No email found in session storage");
+        return;
+      }
+
+      try {
+        const response = await api.get("Order/ViewOrderByStatusAndBuyerEmail", {
+          params: { email: userEmail, status: "null" },
+        });
+        console.log("API response:", response.data);
+        if (Array.isArray(response.data)) {
+          setOrders2(response.data.reverse());
+        } else {
+          setOrders2([]);
+        }
+      } catch (error) {
+        console.error("Error fetching orders", error);
+      }
+    };
+
+    fetchOrdersByStatus();
+  }, []);
+
+  useEffect(() => {
+    const fetchAccountBuyer = async () => {
+      const userEmail = sessionStorage.getItem("email");
+      const encodedEmail = encodeURIComponent(userEmail);
+
+      console.log("User Email:", userEmail);
+      if (!userEmail) {
+        console.error("No email found in session storage");
+        return;
+      }
+
+      try {
+        const response = await api.get(
+          `Account/GetAccountByEmail/${encodedEmail}`
+        );
+        console.log("API response:", response.data);
+        setAccountBuyer(response.data);
+      } catch (error) {
+        console.error("Error fetching account", error);
+      }
+    };
+
+    fetchAccountBuyer();
+  }, []);
+
+  // Fetch order details for each order
+  useEffect(() => {
+    const fetchOrderDetails2 = async () => {
+      setLoading(true);
+      try {
+        const details = await Promise.all(
+          orders2.map((order) =>
+            api
+              .get("Order/ViewOrderDetail", {
+                params: { id: order.orderId },
+              })
+              .then((response) => {
+                return response.data.map((product) => ({
+                  ...product,
+                  orderId: order.orderId,
+                }));
+              })
+          )
+        );
+        const allProducts = details.flat();
+        setOrderDetails2(allProducts);
+      } catch (error) {
+        console.error("Error fetching order details", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (orders2.length > 0) {
+      fetchOrderDetails2();
+    }
+  }, [orders2]);
+
+  // Fetch order details for each order
+  useEffect(() => {
+    const fetchOrderDetails = async () => {
+      setLoading(true);
+      try {
+        const details = await Promise.all(
+          orders.map((order) =>
+            api
+              .get("Order/ViewOrderDetail", {
+                params: { id: order.orderId },
+              })
+              .then((response) => {
+                // Thêm orderId vào từng sản phẩm
+                return response.data.map((product) => ({
+                  ...product,
+                  orderId: order.orderId,
+                }));
+              })
+          )
+        );
+        const allProducts = details.flat();
+        setOrderDetails(allProducts);
+      } catch (error) {
+        console.error("Error fetching order details", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (orders.length > 0) {
+      fetchOrderDetails();
+    }
+  }, [orders]);
+
+  console.log(orders);
+
+  // Group products by orderId
+  const groupedOrderDetails = orderDetails.reduce((acc, item) => {
+    if (!acc[item.orderId]) {
+      acc[item.orderId] = [];
+    }
+    acc[item.orderId].push(item);
+    return acc;
+  }, {});
+
+  const groupedOrderDetails2 = orderDetails2.reduce((acc, item) => {
+    if (!acc[item.orderId]) {
+      acc[item.orderId] = [];
+    }
+    acc[item.orderId].push(item);
+    return acc;
+  }, {});
+
+  const showOrderDetails = async (orderId, status) => {
+    const order = orders.find((o) => o.orderId === orderId);
+    const name = await fetchAccountByOrderId(orderId);
+    console.log("Order found:", order); // Debugging line
+    setSelectedOrder(groupedOrderDetails[orderId]);
+    setSelectedOrderDetails({
+      deliveredAt: order.deliveredAt,
+      totalPrice: order.totalPrice,
+      phoneNumber: order.phoneNumber,
+      orderId: order.orderId, // Ensure orderId is included
+      name, // Add userName to the details
+      createdAt: order.createdAt, // Ensure createdAt is included
+      issueReport: order.issueReport, // Ensure issueReport is included
+    });
+    setStatus(status);
+
+    // Fetch and set order time
+    try {
+      const response = await api.get("DeliveryLog/ViewDeliveryTime", {
+        params: { id: orderId },
+      });
+      setOrderTime(response.data);
+    } catch (error) {
+      console.error("Error fetching order time", error);
+    }
+
+    setIsModalOpen(true);
+  };
+
+  const showOrderDetails2 = (orderId, status) => {
+    const order = orders2.find((o) => o.orderId === orderId);
+    setSelectedOrder(groupedOrderDetails2[orderId]);
+    setSelectedOrderDetails({
+      deliveredAt: order.deliveredAt,
+      totalPrice: order.totalPrice,
+      phoneNumber: order.phoneNumber,
+    });
+    setStatus(status);
+    setIsModalOpen(true);
+  };
+
+  const handleCancel = () => {
+    setIsModalOpen(false);
   };
 
   const getProgressStepClass = (step) => {
-    if (status === "đang chuẩn bị hàng" && step === 1) return "bg-blue-600";
-    if (status === "đang giao hàng" && (step === 1 || step === 2))
+    if (status === "Check Out" && step === 1) return "bg-blue-600";
+    if (status === "Pending" && step === 1) return "bg-blue-600";
+    if (status === "Take over" && (step === 2 || step === 1))
       return "bg-blue-600";
-    if (status === "giao hàng thành công" && step <= 3) return "bg-blue-600";
+
+    if (status === "Delivering" && (step === 1 || step === 2 || step === 3))
+      return "bg-blue-600";
+    if (status === "Success" && step <= 4) return "bg-blue-600";
+    if (status === "Fail" && step <= 4)
+      return step === 4 ? "bg-red-600" : "bg-blue-600";
     return "bg-gray-400";
   };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    if (isNaN(date)) return "";
+    const options = {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    };
+    return date.toLocaleDateString("en-US", options);
+  };
+
+  const formatCurrency = (amount) => {
+    const validAmount = amount !== undefined ? amount : 0;
+    return (
+      validAmount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") + " VNĐ"
+    );
+  };
+
+  const handleReview = (orderId) => {
+    navigate(`/rating-page/${orderId}`);
+  };
+
+  const handleAccept = async (orderId) => {
+    const order = orders2.find((o) => o.orderId === orderId);
+
+    if (accountBuyer.balance < order.totalPrice) {
+      navigate("/wallet-customer");
+      toast.error("Your balance is not enough");
+      return;
+    }
+
+    try {
+      const response = await api.put(
+        "Order/UpdateOrderStatusCreatedBySeller",
+        null,
+        {
+          params: {
+            orderId: orderId,
+            status: "Accepted",
+          },
+        }
+      );
+      if (response.data === true) {
+        toast.success("Accept order successfully");
+        window.location.reload();
+      } else {
+        toast.error("Accept order failed");
+      }
+    } catch (error) {
+      console.error("Error updating order status", error);
+      toast.error("Error updating order status");
+    }
+  };
+
+  const handleReject = async (orderId) => {
+    const order = orders2.find((o) => o.orderId === orderId);
+
+    const response = await api.put(
+      "Order/UpdateOrderStatusCreatedBySeller",
+      null,
+      {
+        params: {
+          orderId: orderId,
+          status: "Rejected",
+        },
+      }
+    );
+    if (response.data === true) {
+      toast.success("Reject order successfully");
+      window.location.reload();
+    } else {
+      toast.error("Reject order failed");
+    }
+  };
+
+  const handleCancelOrder = async (orderId) => {
+    navigate(`/cancelorder/${orderId}`);
+  };
+
+  const fetchAccountByOrderId = async (orderId) => {
+    try {
+      const response = await api.get("Account/ViewAccountBuyerByOrderId", {
+        params: { orderId },
+      });
+      console.log("API response:", response.data.name); // Kiểm tra dữ liệu trả về
+      return response.data.name; // Lấy thuộc tính name
+    } catch (error) {
+      console.error("Error fetching account by orderId", error);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const fetchOrderTime = async () => {
+      setLoading(true);
+      try {
+        const response = await api.get("DeliveryLog/ViewDeliveryTime", {
+          params: {
+            id: orders.orderId,
+          },
+        });
+        setOrderTime(response.data);
+      } catch (error) {
+        console.error("Error fetching order details", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOrderTime();
+  }, [orders]);
+
+  const handleCheckRatingOrderByUserEmail = async () => {
+    const email = sessionStorage.getItem("email");
+    try {
+      const response = await api.get("Rating/CheckRatingByOrderId", {
+        params: {
+          email: email,
+          orderId: selectedOrderDetails.orderId,
+        },
+      });
+      console.log("API response:", response.data);
+      setIsRated(response.data); // Update state based on API response
+    } catch (error) {
+      console.error("Error fetching rating", error);
+    }
+  };
+
+  // Call this function when the modal is opened
+  useEffect(() => {
+    if (isModalOpen) {
+      handleCheckRatingOrderByUserEmail();
+    }
+  }, [isModalOpen, selectedOrderDetails.orderId]);
 
   return (
     <>
@@ -33,90 +410,720 @@ function Order_Page() {
       <div className="border-t pt-16 ml-[300px] mr-[300px]">
         <div className="text-2xl">
           <div className="inline-flex items-center gap-2 mb-2 mt-10">
-            <p className="prata-regular text-3xl">My Order</p>
+            <p className="prata-regular text-3xl">My Orders</p>
             <hr className="border-none h-[1.5px] w-8 bg-gray-800" />
-          </div>
-        </div>
-
-        <div>
-          <div className="py-4 border-t border-b text-gray-700 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="flex items-start gap-6 text-sm">
-              <img
-                src="https://greengarden.vn/wp-content/uploads/2023/12/hoa-hong2.jpg"
-                alt="Product"
-                className="w-16 sm:w-20"
-              />
-              <div>
-                <p className="sm:text-base font-medium">Product Name</p>
-                <div className="flex items-center gap-3 mt-2 text-base text-gray-700">
-                  <p className="text-lg">Price</p>
-                  <p>Quantity: 1</p>
-                  <p>comboType</p>
-                </div>
-                <p>
-                  Date: <span className="text-gray-500">9/10/2024</span>
-                </p>
-              </div>
-            </div>
-
-            <div className="md:w-1/2 flex justify-between">
-              <div className="flex items-center gap-2">
-                <p className="min-w-2 h-2 rounded-full bg-green-500"></p>
-                <p className="text-sm md:text-base">Ready to ship</p>
-              </div>
-
-              <button
-                className="border px-4 py-2 text-sm font-medium rounded-sm"
-                onClick={showLoading}
-              >
-                Track order
-              </button>
-            </div>
           </div>
         </div>
       </div>
 
-      <Modal
-        title={<p>Loading Modal</p>}
-        footer={
-          <Button type="primary" onClick={showLoading}>
-            Reload
-          </Button>
-        }
-        loading={loading}
-        open={open}
-        onCancel={() => setOpen(false)}
-      >
-        <p className="text-lg font-medium text-center">Detail Order</p>
-        <div className="p-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="text-gray-500 mb-2">
-                Order ID{" "}
-                <span className="font-bold text-black">1222528743</span>
-              </p>
-              <p className="text-gray-500 mb-0">
-                Order On <span className="font-bold text-black">9/10/2024</span>
-              </p>
+      <div className="ml-[300px] w-[1100px]">
+        <Tabs>
+          <Tab label="Your Orders Requested">
+            <div className="py-4">
+              {/* Display products for each order */}
+              <div>
+                {loading ? (
+                  <p>Loading...</p>
+                ) : orders2.length > 0 ? (
+                  orders2.map((order2) => (
+                    <div key={order2.orderId} className="mb-8">
+                      <h3 className="text-xl font-bold mb-4">
+                        Order ID: {order2.orderId}
+                      </h3>
+                      {groupedOrderDetails2[order2.orderId]?.map(
+                        (item, index) => (
+                          <div
+                            key={index}
+                            className={`py-4 text-gray-700 ${
+                              index === 0 ? "border-t" : ""
+                            } ${
+                              index ===
+                              groupedOrderDetails2[order2.orderId].length - 1
+                                ? "border-b"
+                                : ""
+                            }`}
+                          >
+                            {/* Product details */}
+                            <div className="flex items-start justify-between gap-6 text-sm">
+                              <div className="flex items-start gap-6">
+                                <img
+                                  src={item.productImage[0]}
+                                  alt={item.productName}
+                                  className="w-16 sm:w-20"
+                                />
+                                <div className="flex-1">
+                                  <p className="sm:text-base font-medium">
+                                    {item.productName}
+                                  </p>
+                                  <div className="flex items-center gap-3 mt-2 text-base text-gray-700">
+                                    <p className="text-lg">
+                                      {formatCurrency(item.price)}
+                                    </p>
+                                    <p>Quantity: {item.quantity}</p>
+                                  </div>
+                                  <p>
+                                    Date:{" "}
+                                    <span className="text-gray-500">
+                                      {formatDate(item.createdAt)}
+                                    </span>
+                                  </p>
+                                </div>
+                              </div>
+
+                              {index === 0 && (
+                                <div className="flex items-center gap-2">
+                                  <p className="min-w-2 h-2 rounded-full bg-green-500"></p>
+                                  <p className="text-sm md:text-base">
+                                    {order2.status || "Pending"}
+                                  </p>
+                                </div>
+                              )}
+
+                              {index === 0 && (
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    onClick={() =>
+                                      showOrderDetails2(
+                                        order2.orderId,
+                                        order2.status
+                                      )
+                                    }
+                                  >
+                                    CheckOrder
+                                  </Button>
+                                  <Button
+                                    onClick={() => handleAccept(order2.orderId)}
+                                  >
+                                    Accept
+                                  </Button>
+                                  <Button
+                                    onClick={() => handleReject(order2.orderId)}
+                                  >
+                                    Reject
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p>No products found.</p>
+                )}
+              </div>
             </div>
-          </div>
+          </Tab>
+
+          <Tab label="On Pending">
+            <div className="py-4 ">
+              {/* Hiển thị sản phẩm theo từng đơn hàng */}
+              <div>
+                {loading ? (
+                  <p>Loading...</p>
+                ) : orders.length > 0 ? (
+                  orders
+                    .filter((order) => order.status === "Pending") // Filter orders by status
+                    .map((order) => (
+                      <div key={order.orderId} className="mb-8">
+                        <h3 className="text-xl font-bold mb-4">
+                          Order ID: {order.orderId}
+                        </h3>
+                        {groupedOrderDetails[order.orderId]?.map(
+                          (item, index) => (
+                            <div
+                              key={index}
+                              className={`py-4 text-gray-700 ${
+                                index === 0 ? "border-t" : ""
+                              } ${
+                                index ===
+                                groupedOrderDetails[order.orderId].length - 1
+                                  ? "border-b"
+                                  : ""
+                              }`}
+                            >
+                              {/* Product details */}
+                              <div className="flex items-start justify-between gap-6 text-sm">
+                                <Link to={`/product-page/${item.productId}`}>
+                                  <div className="flex items-start gap-6">
+                                    <img
+                                      src={item.productImage[0]}
+                                      alt={item.productName}
+                                      className="w-16 sm:w-20"
+                                    />
+                                    <div className="flex-1">
+                                      <p className="sm:text-base font-medium">
+                                        {item.productName}
+                                      </p>
+                                      <div className="flex items-center gap-3 mt-2 text-base text-gray-700">
+                                        <p className="text-lg">
+                                          {formatCurrency(item.price)}
+                                        </p>
+                                      </div>
+                                      <p>
+                                        Date:{" "}
+                                        <span className="text-gray-500">
+                                          {formatDate(item.createdAt)}
+                                        </span>
+                                      </p>
+                                    </div>
+                                  </div>
+                                </Link>
+
+                                {index === 0 && (
+                                  <div className="flex items-center gap-2">
+                                    <p className="min-w-2 h-2 rounded-full bg-green-500"></p>
+                                    <p className="text-sm md:text-base">
+                                      {order.status}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {index === 0 && (
+                                  <Button
+                                    onClick={() =>
+                                      showOrderDetails(
+                                        order.orderId,
+                                        order.status
+                                      )
+                                    }
+                                  >
+                                    Track Order
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    ))
+                ) : (
+                  <p>No products found.</p>
+                )}
+              </div>
+            </div>
+          </Tab>
+
+          <Tab label="Take Over">
+            <div className="py-4 ">
+              {/* Hiển thị sản phẩm theo từng đơn hàng */}
+              <div>
+                {loading ? (
+                  <p>Loading...</p>
+                ) : orders.length > 0 ? (
+                  orders
+                    .filter((order) => order.status === "Take over") // Filter orders by status
+                    .map((order) => (
+                      <div key={order.orderId} className="mb-8">
+                        <h3 className="text-xl font-bold mb-4">
+                          Order ID: {order.orderId}
+                        </h3>
+                        {groupedOrderDetails[order.orderId]?.map(
+                          (item, index) => (
+                            <div
+                              key={index}
+                              className={`py-4 text-gray-700 ${
+                                index === 0 ? "border-t" : ""
+                              } ${
+                                index ===
+                                groupedOrderDetails[order.orderId].length - 1
+                                  ? "border-b"
+                                  : ""
+                              }`}
+                            >
+                              {/* Product details */}
+                              <div className="flex items-start justify-between gap-6 text-sm">
+                                <Link to={`/product-page/${item.productId}`}>
+                                  <div className="flex items-start gap-6">
+                                    <img
+                                      src={item.productImage[0]}
+                                      alt={item.productName}
+                                      className="w-16 sm:w-20"
+                                    />
+                                    <div className="flex-1">
+                                      <p className="sm:text-base font-medium">
+                                        {item.productName}
+                                      </p>
+                                      <div className="flex items-center gap-3 mt-2 text-base text-gray-700">
+                                        <p className="text-lg">
+                                          {formatCurrency(item.price)}
+                                        </p>
+                                      </div>
+                                      <p>
+                                        Date:{" "}
+                                        <span className="text-gray-500">
+                                          {formatDate(item.createdAt)}
+                                        </span>
+                                      </p>
+                                    </div>
+                                  </div>
+                                </Link>
+
+                                {index === 0 && (
+                                  <div className="flex items-center gap-2">
+                                    <p className="min-w-2 h-2 rounded-full bg-green-500"></p>
+                                    <p className="text-sm md:text-base">
+                                      {order.status}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {index === 0 && (
+                                  <Button
+                                    onClick={() =>
+                                      showOrderDetails(
+                                        order.orderId,
+                                        order.status
+                                      )
+                                    }
+                                  >
+                                    Track Order
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    ))
+                ) : (
+                  <p>No products found.</p>
+                )}
+              </div>
+            </div>
+          </Tab>
+
+          <Tab label="Delivering">
+            <div className="py-4 ">
+              {/* Hiển thị sản phẩm theo từng đơn hàng */}
+              <div>
+                {loading ? (
+                  <p>Loading...</p>
+                ) : orders.length > 0 ? (
+                  orders
+                    .filter((order) => order.status === "Delivering") // Filter orders by status
+                    .map((order) => (
+                      <div key={order.orderId} className="mb-8">
+                        <h3 className="text-xl font-bold mb-4">
+                          Order ID: {order.orderId}
+                        </h3>
+                        {groupedOrderDetails[order.orderId]?.map(
+                          (item, index) => (
+                            <div
+                              key={index}
+                              className={`py-4 text-gray-700 ${
+                                index === 0 ? "border-t" : ""
+                              } ${
+                                index ===
+                                groupedOrderDetails[order.orderId].length - 1
+                                  ? "border-b"
+                                  : ""
+                              }`}
+                            >
+                              {/* Product details */}
+                              <div className="flex items-start justify-between gap-6 text-sm">
+                                <Link to={`/product-page/${item.productId}`}>
+                                  <div className="flex items-start gap-6">
+                                    <img
+                                      src={item.productImage[0]}
+                                      alt={item.productName}
+                                      className="w-16 sm:w-20"
+                                    />
+                                    <div className="flex-1">
+                                      <p className="sm:text-base font-medium">
+                                        {item.productName}
+                                      </p>
+                                      <div className="flex items-center gap-3 mt-2 text-base text-gray-700">
+                                        <p className="text-lg">
+                                          {formatCurrency(item.price)}
+                                        </p>
+                                      </div>
+                                      <p>
+                                        Date:{" "}
+                                        <span className="text-gray-500">
+                                          {formatDate(item.createdAt)}
+                                        </span>
+                                      </p>
+                                    </div>
+                                  </div>
+                                </Link>
+
+                                {index === 0 && (
+                                  <div className="flex items-center gap-2">
+                                    <p className="min-w-2 h-2 rounded-full bg-green-500"></p>
+                                    <p className="text-sm md:text-base">
+                                      {order.status}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {index === 0 && (
+                                  <Button
+                                    onClick={() =>
+                                      showOrderDetails(
+                                        order.orderId,
+                                        order.status
+                                      )
+                                    }
+                                  >
+                                    Track Order
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    ))
+                ) : (
+                  <p>No products found.</p>
+                )}
+              </div>
+            </div>
+          </Tab>
+
+          <Tab label="Success">
+            <div className="py-4 ">
+              {/* Hiển thị sản phẩm theo từng đơn hàng */}
+              <div>
+                {loading ? (
+                  <p>Loading...</p>
+                ) : orders.length > 0 ? (
+                  orders
+                    .filter((order) => order.status === "Success") // Filter orders by status
+                    .map((order) => (
+                      <div key={order.orderId} className="mb-8">
+                        <h3 className="text-xl font-bold mb-4">
+                          Order ID: {order.orderId}
+                        </h3>
+                        {groupedOrderDetails[order.orderId]?.map(
+                          (item, index) => (
+                            <div
+                              key={index}
+                              className={`py-4 text-gray-700 ${
+                                index === 0 ? "border-t" : ""
+                              } ${
+                                index ===
+                                groupedOrderDetails[order.orderId].length - 1
+                                  ? "border-b"
+                                  : ""
+                              }`}
+                            >
+                              {/* Product details */}
+                              <div className="flex items-start justify-between gap-6 text-sm">
+                                <Link to={`/product-page/${item.productId}`}>
+                                  <div className="flex items-start gap-6">
+                                    <img
+                                      src={item.productImage[0]}
+                                      alt={item.productName}
+                                      className="w-16 sm:w-20"
+                                    />
+                                    <div className="flex-1">
+                                      <p className="sm:text-base font-medium">
+                                        {item.productName}
+                                      </p>
+                                      <div className="flex items-center gap-3 mt-2 text-base text-gray-700">
+                                        <p className="text-lg">
+                                          {formatCurrency(item.price)}
+                                        </p>
+                                      </div>
+                                      <p>
+                                        Date:{" "}
+                                        <span className="text-gray-500">
+                                          {formatDate(item.createdAt)}
+                                        </span>
+                                      </p>
+                                    </div>
+                                  </div>
+                                </Link>
+
+                                {index === 0 && (
+                                  <div className="flex items-center gap-2">
+                                    <p className="min-w-2 h-2 rounded-full bg-green-500"></p>
+                                    <p className="text-sm md:text-base">
+                                      {order.status}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {index === 0 && (
+                                  <Button
+                                    onClick={() =>
+                                      showOrderDetails(
+                                        order.orderId,
+                                        order.status
+                                      )
+                                    }
+                                  >
+                                    Track Order
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    ))
+                ) : (
+                  <p>No products found.</p>
+                )}
+              </div>
+            </div>
+          </Tab>
+
+          <Tab label="Fail">
+            <div className="py-4 ">
+              {/* Hiển thị sản phẩm theo từng đơn hàng */}
+              <div>
+                {loading ? (
+                  <p>Loading...</p>
+                ) : orders.length > 0 ? (
+                  orders
+                    .filter((order) => order.status === "Fail") // Filter orders by status
+                    .map((order) => (
+                      <div key={order.orderId} className="mb-8">
+                        <h3 className="text-xl font-bold mb-4">
+                          Order ID: {order.orderId}
+                        </h3>
+                        {groupedOrderDetails[order.orderId]?.map(
+                          (item, index) => (
+                            <div
+                              key={index}
+                              className={`py-4 text-gray-700 ${
+                                index === 0 ? "border-t" : ""
+                              } ${
+                                index ===
+                                groupedOrderDetails[order.orderId].length - 1
+                                  ? "border-b"
+                                  : ""
+                              }`}
+                            >
+                              {/* Product details */}
+                              <div className="flex items-start justify-between gap-6 text-sm">
+                                <Link to={`/product-page/${item.productId}`}>
+                                  <div className="flex items-start gap-6">
+                                    <img
+                                      src={item.productImage[0]}
+                                      alt={item.productName}
+                                      className="w-16 sm:w-20"
+                                    />
+                                    <div className="flex-1">
+                                      <p className="sm:text-base font-medium">
+                                        {item.productName}
+                                      </p>
+                                      <div className="flex items-center gap-3 mt-2 text-base text-gray-700">
+                                        <p className="text-lg">
+                                          {formatCurrency(item.price)}
+                                        </p>
+                                      </div>
+                                      <p>
+                                        Date:{" "}
+                                        <span className="text-gray-500">
+                                          {formatDate(item.createdAt)}
+                                        </span>
+                                      </p>
+                                    </div>
+                                  </div>
+                                </Link>
+
+                                {index === 0 && (
+                                  <div className="flex items-center gap-2">
+                                    <p className="min-w-2 h-2 rounded-full bg-green-500"></p>
+                                    <p className="text-sm md:text-base">
+                                      {order.status}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {index === 0 && (
+                                  <Button
+                                    onClick={() =>
+                                      showOrderDetails(
+                                        order.orderId,
+                                        order.status
+                                      )
+                                    }
+                                  >
+                                    Track Order
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    ))
+                ) : (
+                  <p>No products found.</p>
+                )}
+              </div>
+            </div>
+          </Tab>
+
+          <Tab label="Cancel">
+            <div className="py-4 ">
+              {/* Hiển thị sản phẩm theo từng đơn hàng */}
+              <div>
+                {loading ? (
+                  <p>Loading...</p>
+                ) : orders.length > 0 ? (
+                  orders
+                    .filter((order) => order.status === "Canceled") // Filter orders by status
+                    .map((order) => (
+                      <div key={order.orderId} className="mb-8">
+                        <h3 className="text-xl font-bold mb-4">
+                          Order ID: {order.orderId}
+                        </h3>
+                        {groupedOrderDetails[order.orderId]?.map(
+                          (item, index) => (
+                            <div
+                              key={index}
+                              className={`py-4 text-gray-700 ${
+                                index === 0 ? "border-t" : ""
+                              } ${
+                                index ===
+                                groupedOrderDetails[order.orderId].length - 1
+                                  ? "border-b"
+                                  : ""
+                              }`}
+                            >
+                              {/* Product details */}
+                              <div className="flex items-start justify-between gap-6 text-sm">
+                                <Link to={`/product-page/${item.productId}`}>
+                                  <div className="flex items-start gap-6">
+                                    <img
+                                      src={item.productImage[0]}
+                                      alt={item.productName}
+                                      className="w-16 sm:w-20"
+                                    />
+                                    <div className="flex-1">
+                                      <p className="sm:text-base font-medium">
+                                        {item.productName}
+                                      </p>
+                                      <div className="flex items-center gap-3 mt-2 text-base text-gray-700">
+                                        <p className="text-lg">
+                                          {formatCurrency(item.price)}
+                                        </p>
+                                      </div>
+                                      <p>
+                                        Date:{" "}
+                                        <span className="text-gray-500">
+                                          {formatDate(item.createdAt)}
+                                        </span>
+                                      </p>
+                                    </div>
+                                  </div>
+                                </Link>
+
+                                {index === 0 && (
+                                  <div className="flex items-center gap-2">
+                                    <p className="min-w-2 h-2 rounded-full bg-green-500"></p>
+                                    <p className="text-sm md:text-base">
+                                      {order.status}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {index === 0 && (
+                                  <Button
+                                    onClick={() =>
+                                      showOrderDetails(
+                                        order.orderId,
+                                        order.status
+                                      )
+                                    }
+                                  >
+                                    Track Order
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    ))
+                ) : (
+                  <p>No products found.</p>
+                )}
+              </div>
+            </div>
+          </Tab>
+        </Tabs>
+      </div>
+
+      <Modal
+        title="Order Details"
+        open={isModalOpen}
+        onCancel={handleCancel}
+        className="w-[1000px]"
+        footer={[
+          status === "Success" && !isRated && (
+            <Button
+              key="review"
+              type="primary"
+              onClick={() => {
+                handleReview(selectedOrderDetails.orderId);
+                console.log("orderid", selectedOrderDetails.orderId);
+              }}
+            >
+              Review and Rating
+            </Button>
+          ),
+
+          status === "Pending" && (
+            <Button
+              key="cancel"
+              onClick={() => {
+                handleCancelOrder(selectedOrderDetails.orderId);
+                console.log("orderid", selectedOrderDetails.orderId);
+              }}
+            >
+              Cancel Order
+            </Button>
+          ),
+          <Button key="back" onClick={handleCancel}>
+            Close
+          </Button>,
+        ]}
+      >
+        {/* Display additional order details */}
+        <div className="mt-5">
+          <p className="text-lg font-bold text-center">Delivery Information</p>
+          <p className="text-md font-medium">
+            Buyer Name: {selectedOrderDetails.name}
+          </p>
+          <p className="text-md font-medium">
+            Phone Number: {selectedOrderDetails.phoneNumber}
+          </p>
+          <p className="text-md font-medium">
+            Delivered At: {selectedOrderDetails.deliveredAt}
+          </p>
+          <p className="text-md font-medium">
+            Reason: {selectedOrderDetails.issueReport}
+          </p>
         </div>
 
-        <div className="p-4">
-          <ul className="relative flex justify-between mx-0 mt-0 mb-5 px-0 pt-0 pb-4">
-            <div className="absolute top-3 left-0 w-full h-1 bg-gray-300"></div>
-
+        {/* Thêm tiến trình giao hàng vào dưới phần chi tiết sản phẩm */}
+        <div className="mt-5">
+          <ul className="flex items-center justify-between relative">
+            {/* Thanh tiến trình */}
             <div
               className={`absolute top-3 left-0 ${
-                status === "giao hàng thành công"
+                status === "Success" || status === "Fail"
                   ? "w-full"
-                  : status === "đang giao hàng"
-                  ? "w-2/3"
-                  : "w-1/3"
+                  : status === "Delivering"
+                  ? "w-3/4"
+                  : status === "Pending"
+                  ? "w-1/4"
+                  : status === "Take over"
+                  ? "w-2/4"
+                  : "w-1/4"
               } h-1 bg-blue-600`}
             ></div>
 
-            <li className="relative w-1/3 flex flex-col items-start text-blue-600">
+            {/* Các bước tiến trình */}
+            <li className="relative w-1/4 flex flex-col items-start text-blue-600">
               <div
                 className={`flex items-center justify-center w-7 h-7 text-white rounded-full ${getProgressStepClass(
                   1
@@ -124,21 +1131,41 @@ function Order_Page() {
               >
                 1
               </div>
-              <span className="mt-3 ml-[-5px]">Đang chuẩn bị</span>
+              <span className="mt-3 ml-[-10px]">Check Out</span>
+              <p className="text-gray-500 ml-[-15px]">
+                {selectedOrderDetails?.createdAt ? (
+                  <span>{formatDate(selectedOrderDetails.createdAt)}</span>
+                ) : (
+                  <>
+                    <span>On</span> <br />
+                    <span>Time</span>
+                  </>
+                )}
+              </p>
             </li>
 
-            <li className="relative w-1/3 flex flex-col items-center text-blue-600">
+            <li className="relative w-1/4 flex flex-col items-center text-blue-600">
               <div
-                className={`flex items-center justify-center w-7 h-7 text-white rounded-full ${getProgressStepClass(
+                className={`flex items-center justify-center w-7 h-7 text-white rounded-full ml-[-30px] ${getProgressStepClass(
                   2
                 )}`}
               >
                 2
               </div>
-              <span className="mt-3">Đang được giao</span>
+              <span className="mt-3 ml-[-30px]">Pending</span>
+              <p className="text-gray-500 ml-[5px]">
+                {orderTime.takeOverTime ? (
+                  <span>{formatDate(orderTime.takeOverTime)}</span>
+                ) : (
+                  <>
+                    <span className="ml-[-30px]">On Time</span> <br />
+                    <span className="ml-[-1050px]">.</span>
+                  </>
+                )}
+              </p>
             </li>
 
-            <li className="relative w-1/3 flex flex-col items-end text-gray-500">
+            <li className="relative w-1/4 flex flex-col items-center text-blue-600">
               <div
                 className={`flex items-center justify-center w-7 h-7 text-white rounded-full ${getProgressStepClass(
                   3
@@ -146,231 +1173,79 @@ function Order_Page() {
               >
                 3
               </div>
-              <span className="mt-3">Đã hoàn thành</span>
+              <span className="mt-3">Delivering</span>
+              <p className="text-gray-500 ml-[20px]">
+                {orderTime.deliveringTime ? (
+                  <span>{formatDate(orderTime.deliveringTime)}</span>
+                ) : (
+                  <>
+                    <span className="ml-[-20px]">On Time</span> <br />
+                    <span className="ml-[-1050px]">.</span>
+                  </>
+                )}
+              </p>
+            </li>
+
+            <li className="relative w-1/4 flex flex-col items-end text-blue-600">
+              <div
+                className={`flex items-center justify-center w-7 h-7 text-white rounded-full ${getProgressStepClass(
+                  4
+                )}`}
+              >
+                4
+              </div>
+              <span className="mt-3">
+                {status === "Fail" ? "Fail" : "Success"}
+              </span>
+              <p className="text-gray-500 ml-[50px]">
+                {orderTime.successOrFailTime ? (
+                  <span>{formatDate(orderTime.successOrFailTime)}</span>
+                ) : (
+                  <>
+                    <span className="ml-[-50px]">On Time</span> <br />
+                    <span className="ml-[-1050px]">.</span>
+                  </>
+                )}
+              </p>
             </li>
           </ul>
         </div>
-        <div className="flex mb-4 pb-2">
-          <div className="flex-grow">
-            <h5 className="font-bold">Flower</h5>
-            <p className="text-gray-500">Quantity: 1</p>
-            <h4 className="mb-3">
-              Price: <span className="text-sm text-gray-500"> 299.000 </span>
-            </h4>
+
+        {/* Danh sách sản phẩm trong đơn hàng */}
+        {selectedOrder.map((item, index) => (
+          <div
+            key={index}
+            className="py-4 border-t border-b text-gray-700 mt-6"
+          >
+            <div className="flex items-start gap-6 text-sm">
+              <img
+                src={item.productImage[0]}
+                alt={item.productName}
+                className="w-16 sm:w-20"
+              />
+              <div>
+                <p className="sm:text-base font-medium">{item.productName}</p>
+                <div className="flex items-center gap-3 mt-2 text-base text-gray-700">
+                  <p className="text-lg">{formatCurrency(item.price)}</p>
+                </div>
+                <p>
+                  Date:{" "}
+                  <span className="text-gray-500">
+                    {formatDate(item.createdAt)}
+                  </span>
+                </p>
+              </div>
+            </div>
           </div>
-          <div>
-            <img
-              className="self-center"
-              src="https://123flower.vn/data/item/1708845322/thumb-b0532_600x600.jpg"
-              width="250"
-            />
-          </div>
-        </div>
+        ))}
+        <p className="text-lg ml-[220px] mt-[10px] mb-[30px] font-bold">
+          Total Price: {formatCurrency(selectedOrderDetails.totalPrice)}
+        </p>
       </Modal>
 
       <Footer />
     </>
   );
 }
+
 export default Order_Page;
-
-//Call API
-// export default Order_Page;
-
-// import React, { useState, useEffect } from "react";
-// import axios from "axios"; // Import axios
-// import Header from "../../component/header";
-// import Footer from "../../component/footer";
-// import { Modal, Button } from "antd";
-
-// function Order_Page() {
-//   const [orders, setOrders] = useState([]); // To store user's orders
-//   const [selectedOrder, setSelectedOrder] = useState(null); // To store selected order details
-//   const [isModalOpen, setIsModalOpen] = useState(false);
-//   const [loading, setLoading] = useState(false); // To track loading state
-
-//   // Fetch orders on component mount
-//   useEffect(() => {
-//     const userEmail = "user@example.com"; // Replace with the actual user's email
-//     axios
-//       .get(`/api/getOrdersByEmail?email=${userEmail}`) // Update with your actual API endpoint
-//       .then((response) => {
-//         setOrders(response.data.orders); // Assuming the orders come in response.data.orders
-//       })
-//       .catch((error) => {
-//         console.error("Error fetching orders", error);
-//       });
-//   }, []);
-
-//   // Function to fetch order details by ID and open the modal
-//   const showOrderDetails = (orderId) => {
-//     setLoading(true); // Set loading to true
-//     axios
-//       .get(`/api/getOrderDetails?id=${orderId}`) // Replace with the correct API endpoint
-//       .then((response) => {
-//         setSelectedOrder(response.data); // Store order details in state
-//         setIsModalOpen(true);
-//       })
-//       .catch((error) => {
-//         console.error("Error fetching order details", error);
-//       })
-//       .finally(() => {
-//         setLoading(false); // Set loading to false after the API call completes
-//       });
-//   };
-
-//   const handleOk = () => {
-//     setIsModalOpen(false);
-//     setSelectedOrder(null); // Reset selected order when closing the modal
-//   };
-
-//   const handleCancel = () => {
-//     setIsModalOpen(false);
-//     setSelectedOrder(null); // Reset selected order when cancelling the modal
-//   };
-
-//   // Function to determine step status based on order status
-//   const getProgressStepClass = (step) => {
-//     if (selectedOrder?.status === "đang chuẩn bị hàng" && step === 1) return "bg-blue-600";
-//     if (selectedOrder?.status === "đang giao hàng" && (step === 1 || step === 2))
-//       return "bg-blue-600";
-//     if (selectedOrder?.status === "giao hàng thành công" && step <= 3) return "bg-blue-600";
-//     return "bg-gray-400";
-//   };
-
-//   return (
-//     <>
-//       <Header />
-
-//       <div className="border-t pt-16 ml-[300px] mr-[300px]">
-//         <div className="text-2xl">
-//           <div className="inline-flex items-center gap-2 mb-2 mt-10">
-//             <p className="prata-regular text-3xl">My Orders</p>
-//             <hr className="border-none h-[1.5px] w-8 bg-gray-800" />
-//           </div>
-//         </div>
-
-//         {/* List all orders */}
-//         <div>
-//           {orders.map((order) => (
-//             <div key={order.id} className="py-4 border-t border-b text-gray-700 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-//               <div className="flex items-start gap-6 text-sm">
-//                 <img
-//                   src={order.productImage} // Assuming order object has productImage
-//                   alt={order.productName}
-//                   className="w-16 sm:w-20"
-//                 />
-//                 <div>
-//                   <p className="sm:text-base font-medium">{order.productName}</p>
-//                   <div className="flex items-center gap-3 mt-2 text-base text-gray-700">
-//                     <p className="text-lg">{order.price}</p>
-//                     <p>Quantity: {order.quantity}</p>
-//                   </div>
-//                   <p>Date: <span className="text-gray-500">{order.date}</span></p>
-//                 </div>
-//               </div>
-
-//               <div className="md:w-1/2 flex justify-between">
-//                 <button
-//                   className="border px-4 py-2 text-sm font-medium rounded-sm"
-//                   onClick={() => showOrderDetails(order.id)} // Pass order ID to fetch details
-//                 >
-//                   Track order
-//                 </button>
-//               </div>
-//             </div>
-//           ))}
-//         </div>
-//       </div>
-
-//       {/* Modal to show order details */}
-//       <Modal
-//         title={<p>Loading Order Details</p>}
-//         open={isModalOpen}
-//         onCancel={handleCancel}
-//         footer={[
-//           <Button key="back" onClick={handleCancel}>
-//             Close
-//           </Button>
-//         ]}
-//         closable={!loading} // Prevent closing the modal while loading
-//         confirmLoading={loading} // Show loading state on modal button
-//       >
-//         {loading ? (
-//           <p className="text-center">Loading...</p>
-//         ) : (
-//           selectedOrder && (
-//             <div className="p-4">
-//               <div className="flex justify-between items-center">
-//                 <div>
-//                   <p className="text-gray-500 mb-2">
-//                     Order ID <span className="font-bold text-black">{selectedOrder.id}</span>
-//                   </p>
-//                   <p className="text-gray-500 mb-0">
-//                     Order On <span className="font-bold text-black">{selectedOrder.date}</span>
-//                   </p>
-//                 </div>
-//               </div>
-
-//               <div className="p-4">
-//                 {/* Status Progress Bar */}
-//                 <ul className="relative flex justify-between mx-0 mt-0 mb-5 px-0 pt-0 pb-4">
-//                   <div className="absolute top-3 left-0 w-full h-1 bg-gray-300"></div>
-
-//                   {/* Progress line based on order status */}
-//                   <div
-//                     className={`absolute top-3 left-0 ${
-//                       selectedOrder.status === "giao hàng thành công"
-//                         ? "w-full"
-//                         : selectedOrder.status === "đang giao hàng"
-//                         ? "w-2/3"
-//                         : "w-1/3"
-//                     } h-1 bg-blue-600`}
-//                   ></div>
-
-//                   <li className="relative w-1/3 flex flex-col items-start text-blue-600">
-//                     <div className={`flex items-center justify-center w-7 h-7 text-white rounded-full ${getProgressStepClass(1)}`}>
-//                       1
-//                     </div>
-//                     <span className="mt-3 ml-[-5px]">Đang chuẩn bị</span>
-//                   </li>
-
-//                   <li className="relative w-1/3 flex flex-col items-center text-blue-600">
-//                     <div className={`flex items-center justify-center w-7 h-7 text-white rounded-full ${getProgressStepClass(2)}`}>
-//                       2
-//                     </div>
-//                     <span className="mt-3">Đang được giao</span>
-//                   </li>
-
-//                   <li className="relative w-1/3 flex flex-col items-end text-gray-500">
-//                     <div className={`flex items-center justify-center w-7 h-7 text-white rounded-full ${getProgressStepClass(3)}`}>
-//                       3
-//                     </div>
-//                     <span className="mt-3">Đã hoàn thành</span>
-//                   </li>
-//                 </ul>
-//               </div>
-
-//               <div className="flex mb-4 pb-2">
-//                 <div className="flex-grow">
-//                   <h5 className="font-bold">{selectedOrder.productName}</h5>
-//                   <p className="text-gray-500">Quantity: {selectedOrder.quantity}</p>
-//                   <h4 className="mb-3">
-//                     Price: <span className="text-sm text-gray-500">{selectedOrder.price}</span>
-//                   </h4>
-//                 </div>
-//                 <div>
-//                   <img className="self-center" src={selectedOrder.productImage} width="250" alt={selectedOrder.productName} />
-//                 </div>
-//               </div>
-//             </div>
-//           )
-//         )}
-//       </Modal>
-
-//       <Footer />
-//     </>
-//   );
-// }
-
-// export default Order_Page;

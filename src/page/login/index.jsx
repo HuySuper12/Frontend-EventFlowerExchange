@@ -4,28 +4,31 @@ import Header from "../../component/header";
 import api from "../../config/axios";
 import { useNavigate } from "react-router-dom";
 import Footer from "../../component/footer";
+import { GoogleLogin } from "@react-oauth/google";
+import { toast } from "react-toastify";
 
 const Login = () => {
   const navigate = useNavigate();
 
+  const handleSignup = () => {
+    navigate("/register");
+  };
+
+  const handleForgetPassword = () => {
+    navigate("/forgot-password");
+  };
+
   const handleLogin = async (values) => {
     try {
-      // Gửi request đến server
       const response = await api.post("Account/Login", values);
+      const token = response.data;
 
-      // Giả sử token là một chuỗi ở cấp độ đầu tiên của response.data
-      const token = response.data; // Lấy token từ phản hồi
-
-      // Kiểm tra xem token có tồn tại không
       if (!token) {
         throw new Error("Token không tồn tại trong phản hồi.");
       }
 
-      // Giải mã token để lấy role và email
-      const tokenParts = token.split("."); // Lấy phần payload từ token
+      const tokenParts = token.split(".");
       const encodedPayload = tokenParts[1];
-
-      // Giải mã payload từ base64
       const decodedPayload = JSON.parse(atob(encodedPayload));
 
       const {
@@ -34,25 +37,59 @@ const Login = () => {
           email,
       } = decodedPayload;
 
-      // Lưu token, role và email vào localStorage
       sessionStorage.setItem("token", token);
       sessionStorage.setItem("role", role);
       sessionStorage.setItem("email", email);
 
-      // Điều hướng dựa trên role
       if (role === "Buyer") {
-        navigate("/"); // Người mua sẽ được điều hướng về trang chính
-      } else if (role === "staff") {
-        navigate("/admin/dashboard"); // Nhân viên sẽ được điều hướng về dashboard
+        navigate("/");
+      } else if (role === "Staff") {
+        navigate("/admin/profile");
       } else if (role === "Seller") {
         navigate("/");
+      } else if (role === "Shipper") {
+        navigate("/shipper/profile");
+      } else if (role === "Manager") {
+        navigate("/manager/dashboard");
       }
     } catch (err) {
-      console.log(err);
-      alert(err.response.data);
+      toast.error("Your email or password is incorrect");
     }
   };
 
+  // Thêm handleLoginGoogle cho Google Login
+  const handleLoginGoogle = async (credentialResponse) => {
+    try {
+      const token = credentialResponse.credential; // Lấy token từ Google
+      const response = await api.post(`Account/LoginByGoogle/${token}`, {});
+
+      const appToken = response.data; // Lấy token từ server
+
+      if (!appToken) {
+        throw new Error("Token không tồn tại trong phản hồi.");
+      }
+
+      const tokenParts = appToken.split(".");
+      const encodedPayload = tokenParts[1];
+      const decodedPayload = JSON.parse(atob(encodedPayload));
+
+      const {
+        "http://schemas.microsoft.com/ws/2008/06/identity/claims/role": role,
+        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress":
+          email,
+      } = decodedPayload;
+
+      sessionStorage.setItem("token", appToken);
+      sessionStorage.setItem("role", role);
+      sessionStorage.setItem("email", email);
+
+      if (role === "Buyer") {
+        navigate("/");
+      }
+    } catch (err) {
+      console.log("Login Failed", err);
+    }
+  };
   return (
     <>
       <Header />
@@ -105,21 +142,24 @@ const Login = () => {
           </Form.Item>
 
           <div className="w-full flex justify-between text-sm mt-[-8px]">
-            <a
-              href="/forgot-password"
+            <div
               className="cursor-pointer mb-[8px] text-sm"
+              onClick={handleForgetPassword}
             >
               Forgot your password?
-            </a>
+            </div>
 
-            <a href="/register" className="cursor-pointer mb-[8px] text-sm ">
+            <div
+              className="cursor-pointer mb-[8px] text-sm "
+              onClick={handleSignup}
+            >
               Create account?
-            </a>
+            </div>
           </div>
 
           <Form.Item>
             <div className="flex justify-center w-full">
-              <Button id = "login1"
+              <Button
                 className="bg-white text-black border border-gray-800 font-light px-8 py-2 text-lg rounded-[18px] w-[100px] h-[40px]"
                 type="primary"
                 htmlType="submit"
@@ -129,6 +169,17 @@ const Login = () => {
             </div>
           </Form.Item>
         </Form>
+
+        <div>
+          <span>
+            <GoogleLogin
+              onSuccess={handleLoginGoogle}
+              onError={() => {
+                toast.error("Login Failed");
+              }}
+            />
+          </span>
+        </div>
       </div>
 
       <Footer />
