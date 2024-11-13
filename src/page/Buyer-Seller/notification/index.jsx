@@ -1,15 +1,16 @@
-// Transaction.jsx
 import React, { useEffect, useState } from "react";
 import SidebarCustomer from "../../../component/slidebar-customer";
 import Header from "../../../component/header";
 import Footer from "../../../component/footer";
 import { Table } from "antd";
 import api from "../../../config/axios";
+import { Tab, Tabs } from "../../../component/tab";
 
 const Notification = () => {
   const [notifications, setNotifications] = useState([]);
+  const [shopNotifications, setShopNotifications] = useState([]);
   const email = sessionStorage.getItem("email");
-
+  const role = sessionStorage.getItem("role");
   const fetchNotifications = async () => {
     if (email) {
       try {
@@ -24,8 +25,30 @@ const Notification = () => {
     }
   };
 
+  const fetchShopNotifications = async () => {
+    if (email) {
+      try {
+        const response = await api.get(
+          `Notification/ViewNotificationByUserEmail`,
+          {
+            params: {
+              email: email,
+            },
+          }
+        );
+        setShopNotifications(response.data.reverse());
+      } catch (error) {
+        console.error("Error fetching notifications:", error);
+      }
+    }
+  };
+
   useEffect(() => {
     fetchNotifications();
+  }, [email]);
+
+  useEffect(() => {
+    fetchShopNotifications();
   }, [email]);
 
   const columns = [
@@ -53,11 +76,25 @@ const Notification = () => {
         <div className="w-full ml-[30px] bg-white shadow-2xl rounded-xl p-4">
           <div className="mb-6 p-4 border border-gray-300 rounded-lg">
             <h4 className="text-lg font-bold mb-[20px]">Notifications</h4>
-            <Table
-              dataSource={notifications}
-              columns={columns}
-              pagination={{ pageSize: 9 }}
-            />
+            <Tabs>
+              <Tab label="Notification System" key="1">
+                <Table
+                  dataSource={notifications}
+                  columns={columns}
+                  pagination={{ pageSize: 9 }}
+                />
+              </Tab>
+
+              {role !== "Seller" && (
+                <Tab label="Shop Notifications" key="1">
+                  <Table
+                    dataSource={shopNotifications}
+                    columns={columns}
+                    pagination={{ pageSize: 9 }}
+                  />
+                </Tab>
+              )}
+            </Tabs>
             ;
           </div>
         </div>
