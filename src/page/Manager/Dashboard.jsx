@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Row, Col, Card, List, Avatar, Typography, Table } from "antd";
+import { Row, Col, Card, List, Avatar, Typography, Table, Button } from "antd";
 import {
   LineChart,
   Line,
@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import api from "../../config/axios";
+import Papa from "papaparse";
 
 const DashboardManager = () => {
   const [orders, setOrders] = useState([]);
@@ -106,6 +107,19 @@ const DashboardManager = () => {
     fetchRecentProducts();
   }, []);
 
+  const exportToCSV = (data, filename) => {
+    const csv = Papa.unparse(data);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${filename}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const columns = [
     {
       title: "Order ID",
@@ -180,6 +194,12 @@ const DashboardManager = () => {
       <Row gutter={16}>
         <Col span={8}>
           <Card title="Monthly Revenue">
+            <Button
+              className="ml-[300px] mb-[20px]"
+              onClick={() => exportToCSV(revenueData, "Monthly_Revenue")}
+            >
+              Export to CSV
+            </Button>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={revenueData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -193,6 +213,12 @@ const DashboardManager = () => {
         </Col>
         <Col span={8}>
           <Card title="Monthly Orders">
+            <Button
+              className="ml-[300px] mb-[20px]"
+              onClick={() => exportToCSV(ordersData, "Monthly_Orders")}
+            >
+              Export to CSV
+            </Button>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={ordersData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -206,6 +232,14 @@ const DashboardManager = () => {
         </Col>
         <Col span={8}>
           <Card title="New Monthly Customers">
+            <Button
+              className="ml-[300px] mb-[20px]"
+              onClick={() =>
+                exportToCSV(monthlyCustomersData, "Monthly_Customers")
+              }
+            >
+              Export to CSV
+            </Button>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={monthlyCustomersData}>
                 <CartesianGrid strokeDasharray="3 3" />

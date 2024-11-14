@@ -14,9 +14,13 @@ const Notification = () => {
   const fetchNotifications = async () => {
     if (email) {
       try {
-        const encodedEmail = encodeURIComponent(email);
         const response = await api.get(
-          `Notification/ViewNotificationByUserEmail/${encodedEmail}`
+          `Notification/ViewNotificationByUserEmail`,
+          {
+            params: {
+              email: email,
+            },
+          }
         );
         setNotifications(response.data.reverse());
       } catch (error) {
@@ -29,7 +33,7 @@ const Notification = () => {
     if (email) {
       try {
         const response = await api.get(
-          `Notification/ViewNotificationByUserEmail`,
+          `Notification/ViewShopNotificationByUserEmail`,
           {
             params: {
               email: email,
@@ -81,7 +85,7 @@ const Notification = () => {
                 <Table
                   dataSource={notifications}
                   columns={columns}
-                  pagination={{ pageSize: 9 }}
+                  pagination={{ pageSize: 7 }}
                 />
               </Tab>
 
@@ -90,7 +94,7 @@ const Notification = () => {
                   <Table
                     dataSource={shopNotifications}
                     columns={columns}
-                    pagination={{ pageSize: 9 }}
+                    pagination={{ pageSize: 7 }}
                   />
                 </Tab>
               )}

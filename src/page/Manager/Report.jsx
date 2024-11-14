@@ -1,3 +1,4 @@
+// src/page/Admin/Posts.jsx
 import React, { useState, useEffect } from "react";
 import {
   Table,
@@ -11,30 +12,22 @@ import {
   Image,
   Form,
   Input,
-  Select,
 } from "antd";
 import api from "../../config/axios";
 
-const { CheckableTag } = Tag;
-
-const Posts = () => {
-  const [posts, setPosts] = useState([]);
+const ReportManager = () => {
+  const [report, setReport] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [productDetails, setProductDetails] = useState(null);
   const [detailsVisible, setDetailsVisible] = useState(false);
-  const [rejectVisible, setRejectVisible] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
-  const [selectedPost, setSelectedPost] = useState(null);
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [selectedTags, setSelectedTags] = useState(["All"]);
   const pageSize = 8;
 
-  const fetchPosts = async () => {
+  const fetchReport = async () => {
     try {
-      const response = await api.get("Request/GetRequestList/post");
+      const response = await api.get("Request/GetRequestList/Report");
       setTimeout(() => {
-        setPosts(response.data.reverse());
+        setReport(response.data.reverse());
         setLoading(false);
       }, 1000);
     } catch (error) {
@@ -73,7 +66,7 @@ const Posts = () => {
   };
 
   useEffect(() => {
-    fetchPosts();
+    fetchReport();
   }, []);
 
   const handleAccept = async (post) => {
@@ -82,7 +75,7 @@ const Posts = () => {
       const payload = {
         requestId: post.requestId,
         userId: post.userId,
-        requestType: "Post",
+        requestType: "Report",
         productId: post.productId,
         status: "Accepted",
       };
@@ -91,125 +84,28 @@ const Posts = () => {
       const response = await api.put("Request/UpdateRequest", payload);
 
       if (response.data === true) {
-        setPosts(
-          posts.map((p) =>
-            p.productId === post.productId ? { ...p, status: "Accepted" } : p
-          )
-        );
-        message.success(`Post ${post.productId} has been accepted.`);
+        message.success(`Post ${post.productId} has been banned.`);
       } else {
         throw new Error("Failed to update post status");
       }
     } catch (error) {
-      console.error("Error accepting post: ", error);
+      console.error("Error ban post: ", error);
       message.error(
-        "Failed to accept post. Please check server logs for details."
+        "Failed to ban post. Please check server logs for details."
       );
     } finally {
       setLoading(false);
     }
   };
 
-  const handleReject = async (post, reason) => {
-    setLoading(true);
-    try {
-      const response = await api.put("Request/UpdateRequest", {
-        userId: post.userId,
-        requestType: "Post",
-        productId: post.productId,
-        status: "Rejected",
-        reason: reason,
-      });
-
-      if (response.data === true) {
-        setPosts(
-          posts.map((p) =>
-            p.productId === post.productId ? { ...p, status: "Rejected" } : p
-          )
-        );
-        message.success(`Post ${post.productId} has been rejected.`);
-      } else {
-        throw new Error("Failed to update post status");
-      }
-    } catch (error) {
-      console.error("Error rejecting post: ", error);
-      message.error("Failed to reject post.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const showRejectModal = (post) => {
-    setSelectedPost(post);
-    setRejectVisible(true);
-  };
-
-  const handleRejectOk = () => {
-    if (selectedPost) {
-      handleReject(selectedPost, rejectReason);
-    }
-    setRejectVisible(false);
-    setRejectReason("");
-  };
-
-  const handleRejectCancel = () => {
-    setRejectVisible(false);
-    setRejectReason("");
-  };
-
-  const handleTagChange = (tag, checked) => {
-    let nextSelectedTags;
-
-    if (tag === "All") {
-      nextSelectedTags = checked ? ["All"] : [];
-    } else {
-      nextSelectedTags = checked
-        ? [...selectedTags.filter((t) => t !== "All"), tag]
-        : selectedTags.filter((t) => t !== tag);
-
-      if (nextSelectedTags.length === 0) {
-        nextSelectedTags = ["All"];
-      }
-    }
-
-    setSelectedTags(nextSelectedTags);
-  };
-
   const renderList = () => {
-    const filteredPosts = selectedTags.includes("All")
-      ? posts
-      : posts.filter((post) => selectedTags.includes(post.status));
-
-    const paginatedPosts = filteredPosts.slice(
+    const paginatedPosts = report.slice(
       (currentPage - 1) * pageSize,
       currentPage * pageSize
     );
 
     return (
       <>
-        <div className="mb-4">
-          {["All", "Pending", "Accepted", "Rejected"].map((tag) => (
-            <CheckableTag
-              key={tag}
-              checked={selectedTags.includes(tag)}
-              onChange={(checked) => handleTagChange(tag, checked)}
-              className={`px-3 py-1 mr-2 mb-2 border rounded-full cursor-pointer bg-white ${
-                tag === "Pending"
-                  ? "text-yellow-500 border-yellow-500 hover:text-yellow-600"
-                  : tag === "Accepted"
-                  ? "text-green-500 border-green-500 hover:text-green-600"
-                  : tag === "Rejected"
-                  ? "text-red-500 border-red-500 hover:text-red-600"
-                  : "text-gray-500 border-gray-500"
-              }`}
-            >
-              {tag}
-              {selectedTags.includes(tag) && (
-                <span className="ml-2 text-sm">x</span>
-              )}
-            </CheckableTag>
-          ))}
-        </div>
         <Spin spinning={loading}>
           <Table
             columns={[
@@ -231,10 +127,9 @@ const Posts = () => {
                 key: "productId",
               },
               {
-                title: "Posted At",
-                dataIndex: "createdAt",
-                key: "createdAt",
-                render: (value) => formatDate(value),
+                title: "Reason",
+                dataIndex: "reason",
+                key: "reason",
               },
               {
                 title: "Status",
@@ -250,7 +145,7 @@ const Posts = () => {
                         : "red"
                     }
                   >
-                    {status.toUpperCase()}
+                    {status ? status.toUpperCase() : "Pending"}
                   </Tag>
                 ),
               },
@@ -265,10 +160,7 @@ const Posts = () => {
                           type="primary"
                           onClick={() => handleAccept(record)}
                         >
-                          Accept
-                        </Button>
-                        <Button danger onClick={() => showRejectModal(record)}>
-                          Reject
+                          Disable Post
                         </Button>
                       </>
                     )}
@@ -290,7 +182,7 @@ const Posts = () => {
           <Pagination
             current={currentPage}
             pageSize={pageSize}
-            total={filteredPosts.length}
+            total={report.length}
             onChange={(page) => setCurrentPage(page)}
           />
         </div>
@@ -316,7 +208,7 @@ const Posts = () => {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-4">Posts</h1>
+      <h1 className="text-3xl font-bold mb-4">Report</h1>
       {renderList()}
       <Modal
         title="Product Details"
@@ -457,20 +349,8 @@ const Posts = () => {
           <p>No details available</p>
         )}
       </Modal>
-      <Modal
-        title="Reject Reason"
-        visible={rejectVisible}
-        onOk={handleRejectOk}
-        onCancel={handleRejectCancel}
-      >
-        <Input.TextArea
-          value={rejectReason}
-          onChange={(e) => setRejectReason(e.target.value)}
-          placeholder="Enter reason for rejection"
-        />
-      </Modal>
     </div>
   );
 };
 
-export default Posts;
+export default ReportManager;

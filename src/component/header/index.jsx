@@ -102,7 +102,12 @@ function Header() {
       try {
         const encodedEmail = encodeURIComponent(email);
         const response = await api.get(
-          `Notification/ViewNotificationByUserEmail/${encodedEmail}`
+          `Notification/ViewNotificationByUserEmail`,
+          {
+            params: {
+              email: email,
+            },
+          }
         );
         setSystemNotifications(response.data.reverse());
       } catch (error) {
